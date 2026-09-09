@@ -7,11 +7,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Build
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.view.WindowManager
@@ -20,7 +16,6 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
@@ -29,7 +24,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var sm: SensorManager
     private var proximity: Sensor? = null
     private var tts: TextToSpeech? = null
-    private var vibrator: Vibrator? = null
 
     private var count = 0
     private var ghost = 0
@@ -38,7 +32,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var touchBackup = false
 
     private var covered = false
-    private var threshold = 5f
+    private var maxRange = 5f
+    private var threshold = 2.5f
+    private var lastValue = -1f
     private var lastRepTime = 0L
 
     private lateinit var tvGoal: TextView
@@ -46,6 +42,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvOfGoal: TextView
     private lateinit var tvPct: TextView
     private lateinit var tvGhost: TextView
+    private lateinit var tvDebug: TextView
     private lateinit var btnMode: Button
     private lateinit var btnTouch: Button
     private lateinit var gauge: GaugeView
@@ -70,6 +67,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tvOfGoal = findViewById(R.id.tvOfGoal)
         tvPct = findViewById(R.id.tvPct)
         tvGhost = findViewById(R.id.tvGhost)
+        tvDebug = findViewById(R.id.tvDebug)
         btnMode = findViewById(R.id.btnMode)
         btnTouch = findViewById(R.id.btnTouch)
         gauge = findViewById(R.id.gauge)
@@ -84,13 +82,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         proximity = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        proximity?.let { threshold = min(it.maximumRange, 5f) }
-
-        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        proximity?.let {
+            maxRange = if (it.maximumRange > 0f) it.maximumRange else 5f
+            threshold = maxRange / 2f
         }
 
         tts = TextToSpeech(this) { status ->
@@ -108,11 +102,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         gauge.mode = gaugeMode
         render()
+        updateDebug()
     }
 
     override fun onResume() {
         super.onResume()
-        proximity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        proximity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) }
     }
 
     override fun onPause() {
@@ -130,11 +125,23 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent?) {
         val d = event?.values?.getOrNull(0) ?: return
+        lastValue = d
         if (!covered && d < threshold) {
             covered = true
         } else if (covered && d >= threshold) {
             covered = false
             addRep(fromSensor = true)
+        }
+        updateDebug()
+    }
+
+    private fun updateDebug() {
+        tvDebug.text = if (proximity == null) {
+            "이 기기에서 근접센서를 찾지 못했습니다"
+        } else {
+            val v = if (lastValue < 0f) "―" else String.format("%.1f", lastValue)
+            val state = if (covered) "닿음" else "떨어짐"
+            "센서 $v  기준 ${String.format("%.1f", threshold)}  최대 ${String.format("%.1f", maxRange)}  $state"
         }
     }
 
@@ -146,12 +153,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         count++
         prefs.edit().putInt("count", count).apply()
         render()
-        vibrate(50)
 
         when {
             count == goal -> {
                 speak("목표 달성입니다. 대단합니다.")
-                vibrate(500)
                 confetti.burst()
             }
             count % 10 == 0 -> {
@@ -163,10 +168,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    private fun vibrate(ms: Long) {
-        vibrator?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
-    }
-
     private fun speak(text: String) {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rep")
     }
@@ -176,10 +177,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tvCount.text = count.toString()
         tvOfGoal.text = "/ $goal"
         tvPct.text = "${(count.toFloat() / goal * 100).roundToInt()}%"
-        tvGhost.text = if (ghost > 0) "직전 ${ghost}개" else "직전 기록 없음"
         btnMode.text = if (gaugeMode == GaugeView.MODE_RING) "원형" else "직선"
         btnTouch.text = if (touchBackup) "터치 켬" else "터치 끔"
-        gauge.setValues(count, ghost, goal)
+
+        // 초기화 직후(0개)에는 고스트 눈금을 감춘다. 1개째부터 다시 나타난다.
+        val showGhost = if (count > 0) ghost else 0
+        tvGhost.text = when {
+            count == 0 -> ""
+            ghost > 0 -> "직전 ${ghost}개"
+            else -> "직전 기록 없음"
+        }
+        gauge.setValues(count, showGhost, goal)
     }
 
     private fun toggleMode() {

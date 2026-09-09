@@ -138,10 +138,21 @@
             android:layout_weight="1" />
 
         <TextView
+            android:id="@+id/tvDebug"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="폰을 바닥에 두고 코를 화면 위쪽에 가까이 대었다 떼면 1회"
+            android:text="센서 확인 중"
+            android:textColor="#FF7A7A7A"
+            android:textSize="13sp"
+            android:typeface="monospace" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="폰을 바닥에 두고 코를 화면 맨 위에 대었다 떼면 1회"
             android:textColor="#FF5F5F5F"
             android:textSize="12sp" />
     </LinearLayout>
