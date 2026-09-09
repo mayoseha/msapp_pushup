@@ -1,0 +1,7 @@
+<resources>
+    <color name="bg">#FF121212</color>
+    <color name="track">#FF2C2C2C</color>
+    <color name="accent">#FFFFD700</color>
+    <color name="ghost">#FFE0E0E0</color>
+    <color name="dim">#FF9A9A9A</color>
+</resources>
