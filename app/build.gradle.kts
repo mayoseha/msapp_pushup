@@ -11,8 +11,8 @@ android {
         applicationId = "kr.haengwoon.pushup"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "2.1.1"
+        versionCode = 18
+        versionName = "2.3"
     }
 
     signingConfigs {

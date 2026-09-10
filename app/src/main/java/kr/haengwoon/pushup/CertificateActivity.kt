@@ -15,7 +15,6 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
@@ -48,12 +47,30 @@ class CertificateActivity : AppCompatActivity() {
 
     private lateinit var preview: ImageView
 
-    private val picker = registerForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            photo = loadScaled(uri, 700)
-            rebuild()
+    private var shotUri: Uri? = null
+
+    private val camera = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { ok: Boolean ->
+        if (ok) {
+            shotUri?.let {
+                photo = loadScaled(it, 700)
+                rebuild()
+            }
+        }
+    }
+
+    /** 촬영한 사진을 담을 임시 파일을 만들고 카메라를 연다 */
+    private fun openCamera() {
+        try {
+            val dir = File(filesDir, "photos")
+            if (!dir.exists()) dir.mkdirs()
+            val f = File(dir, "shot_${date}_$level.jpg")
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            shotUri = uri
+            camera.launch(uri)
+        } catch (e: Exception) {
+            Toast.makeText(this, "카메라를 열 수 없습니다", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -79,21 +96,16 @@ class CertificateActivity : AppCompatActivity() {
             }
         }
         findViewById<Button>(R.id.btnShare).setOnClickListener { share() }
-        btnPhoto.setOnClickListener {
-            picker.launch(PickVisualMediaRequest.Builder()
-                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                .build())
-        }
+        btnPhoto.setOnClickListener { openCamera() }
 
         name = getSharedPreferences("pushup", MODE_PRIVATE).getString("name", "") ?: ""
 
         findViewById<Button>(R.id.btnName).setOnClickListener { askName() }
 
         val saved = Records.getCert(this, date)
+        if (viewOnly) reps = Records.getCertReps(this, date)
         if (viewOnly && saved != null && File(saved).exists()) {
-            btnPhoto.isEnabled = false
-            findViewById<Button>(R.id.btnName).isEnabled = false
-            findViewById<Button>(R.id.btnSave).isEnabled = false
+            // 저장해 둔 이미지를 그대로 보여준다. 버튼은 모두 그대로 쓸 수 있다.
             current = BitmapFactory.decodeFile(saved)
             preview.setImageBitmap(current)
         } else {
@@ -235,20 +247,9 @@ class CertificateActivity : AppCompatActivity() {
         text("$reps  PUSH-UPS  IN  ONE  UNBROKEN  SET", 1230f, 26f, ink, serifThin, 0.12f)
         text("Date awarded   " + prettyDate(), 1288f, 26f, grey, serifThin, 0.06f)
 
-        // 서명 두 곳
-        val sigL = 350f
-        val sigR = W - 350f
-        Brush.pushup(c, sigL - 118f, 1440f, 0.62f, ink)
-        Brush.pushup(c, sigR - 118f, 1440f, 0.62f, ink)
-        val line2 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = grey; strokeWidth = 1.6f }
-        c.drawLine(sigL - 150f, 1462f, sigL + 150f, 1462f, line2)
-        c.drawLine(sigR - 150f, 1462f, sigR + 150f, 1462f, line2)
-        val lab = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = grey; textSize = 22f; typeface = serifThin
-            textAlign = Paint.Align.CENTER; letterSpacing = 0.08f
-        }
-        c.drawText("HEAD OF TRAINING", sigL, 1496f, lab)
-        c.drawText("PROGRAM DIRECTOR", sigR, 1496f, lab)
+        // 좌우에 사람 모양 그림
+        drawPushupFigure(c, 350f, 1430f, 1.0f, ink)
+        drawCheerFigure(c, W - 350f, 1430f, 1.0f, ink)
 
         // 가운데 인장
         val sy = 1420f
@@ -278,6 +279,64 @@ class CertificateActivity : AppCompatActivity() {
         text("No. " + date.replace("-", "") + "-" + (level + 1), 1608f, 21f, grey, serifThin, 0.1f)
 
         return bmp
+    }
+
+    /** 푸쉬업 자세 사람 모양 */
+    private fun drawPushupFigure(c: Canvas, cx: Float, cy: Float, k: Float, col: Int) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = col; style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+        }
+        val head = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col }
+
+        // 바닥선
+        p.strokeWidth = 5f * k
+        c.drawLine(cx - 130f * k, cy + 62f * k, cx + 130f * k, cy + 62f * k, p)
+
+        // 머리
+        c.drawCircle(cx - 88f * k, cy + 2f * k, 21f * k, head)
+
+        // 몸통 (어깨에서 엉덩이로 비스듬히)
+        p.strokeWidth = 26f * k
+        c.drawLine(cx - 62f * k, cy + 12f * k, cx + 58f * k, cy + 34f * k, p)
+
+        // 팔
+        p.strokeWidth = 16f * k
+        c.drawLine(cx - 58f * k, cy + 14f * k, cx - 52f * k, cy + 58f * k, p)
+
+        // 다리
+        p.strokeWidth = 18f * k
+        c.drawLine(cx + 56f * k, cy + 34f * k, cx + 122f * k, cy + 56f * k, p)
+    }
+
+    /** 두 팔 들고 기뻐하는 사람 모양 */
+    private fun drawCheerFigure(c: Canvas, cx: Float, cy: Float, k: Float, col: Int) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = col; style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+        }
+        val head = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col }
+
+        // 바닥선
+        p.strokeWidth = 5f * k
+        c.drawLine(cx - 130f * k, cy + 62f * k, cx + 130f * k, cy + 62f * k, p)
+
+        // 머리
+        c.drawCircle(cx, cy - 74f * k, 22f * k, head)
+
+        // 몸통
+        p.strokeWidth = 24f * k
+        c.drawLine(cx, cy - 48f * k, cx, cy + 2f * k, p)
+
+        // 만세한 두 팔
+        p.strokeWidth = 15f * k
+        c.drawLine(cx - 6f * k, cy - 42f * k, cx - 52f * k, cy - 94f * k, p)
+        c.drawLine(cx + 6f * k, cy - 42f * k, cx + 52f * k, cy - 94f * k, p)
+
+        // 두 다리
+        p.strokeWidth = 17f * k
+        c.drawLine(cx - 3f * k, cy + 2f * k, cx - 34f * k, cy + 58f * k, p)
+        c.drawLine(cx + 3f * k, cy + 2f * k, cx + 34f * k, cy + 58f * k, p)
     }
 
     private fun englishLevel(l: Int): String = when (l) {
@@ -346,7 +405,7 @@ class CertificateActivity : AppCompatActivity() {
         try {
             val f = file()
             FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            Records.setCert(this, date, f.absolutePath)
+            Records.setCert(this, date, f.absolutePath, reps)
         } catch (e: Exception) {
             Toast.makeText(this, "저장하지 못했습니다", Toast.LENGTH_SHORT).show()
         }

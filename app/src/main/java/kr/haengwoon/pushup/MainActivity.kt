@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private var lastRepTime = 0L
     private var streak = 0                      // 쉬지 않고 이어서 한 개수
     private val restMillis = 600_000L           // 10분. 이 시간이 지나면 세트가 끊긴 것으로 본다
+    private val certReps = 100                  // 수료증 조건: 쉬지 않고 이만큼
 
     private lateinit var tvGoal: TextView
     private lateinit var tvLevel: TextView
@@ -248,11 +249,11 @@ class MainActivity : AppCompatActivity() {
         val doneKey = "done_" + Records.today()
         val alreadyToday = prefs.getBoolean(doneKey, false)
 
-        // 한 세트로 목표를 끝냈다 — 수료증
-        if (streak == goal) {
+        // 쉬지 않고 100개를 끝냈다 — 수료증
+        if (streak == certReps) {
             confetti.burst()
-            speak("한 번에 ${goal}개를 끝내셨습니다. 대단합니다.")
-            if (!alreadyToday) prefs.edit().putBoolean(doneKey, true).apply()
+            speak("한 번에 ${certReps}개를 끝내셨습니다. 대단합니다.")
+            if (today >= goal && !alreadyToday) prefs.edit().putBoolean(doneKey, true).apply()
             offerCertificate()
             return
         }
@@ -286,14 +287,14 @@ class MainActivity : AppCompatActivity() {
             .setTitle("한 세트 완주")
             .setMessage(
                 "${Records.LEVELS.getOrElse(level) { "" }}\n\n" +
-                "쉬지 않고 ${goal}개를 끝내셨습니다.\n" +
+                "쉬지 않고 ${certReps}개를 끝내셨습니다.\n" +
                 "수료증을 만들어 남기시겠습니까?"
             )
             .setPositiveButton("수료증 만들기") { _, _ ->
                 startActivity(Intent(this, CertificateActivity::class.java).apply {
                     putExtra(CertificateActivity.EXTRA_LEVEL, level)
                     putExtra(CertificateActivity.EXTRA_DATE, Records.today())
-                    putExtra(CertificateActivity.EXTRA_REPS, goal)
+                    putExtra(CertificateActivity.EXTRA_REPS, certReps)
                 })
             }
             .setNegativeButton("나중에", null)

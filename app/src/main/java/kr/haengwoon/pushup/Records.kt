@@ -64,13 +64,17 @@ object Records {
     fun todayCount(ctx: Context): Int = get(ctx, today())?.first ?: 0
 
     /** 그날 발급된 수료증 이미지 경로 */
-    fun setCert(ctx: Context, date: String, path: String) {
+    fun setCert(ctx: Context, date: String, path: String, reps: Int) {
         val all = load(ctx)
         val day = all.optJSONObject(date) ?: JSONObject()
         day.put("cert", path)
+        day.put("creps", reps)
         all.put(date, day)
         save(ctx, all)
     }
+
+    fun getCertReps(ctx: Context, date: String): Int =
+        load(ctx).optJSONObject(date)?.optInt("creps", 100) ?: 100
 
     fun getCert(ctx: Context, date: String): String? {
         val day = load(ctx).optJSONObject(date) ?: return null
