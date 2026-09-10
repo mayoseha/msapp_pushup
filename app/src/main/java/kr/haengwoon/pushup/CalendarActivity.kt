@@ -17,6 +17,11 @@ class CalendarActivity : AppCompatActivity() {
     private lateinit var grid: GridLayout
     private lateinit var tvMonth: TextView
     private val cal: Calendar = Calendar.getInstance()
+    private lateinit var stats: StatsView
+    private lateinit var tvStatTitle: TextView
+    private lateinit var tvStatSum: TextView
+    private lateinit var periodButtons: List<Button>
+    private var period = Records.Period.DAY
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +29,24 @@ class CalendarActivity : AppCompatActivity() {
 
         grid = findViewById(R.id.grid)
         tvMonth = findViewById(R.id.tvMonth)
+        stats = findViewById(R.id.stats)
+        tvStatTitle = findViewById(R.id.tvStatTitle)
+        tvStatSum = findViewById(R.id.tvStatSum)
+
+        // 폰 하단 제스처 막대와 버튼이 겹치지 않게 여백을 준다
+        Insets.applyBottom(findViewById(R.id.root))
+
+        periodButtons = listOf(
+            findViewById(R.id.btnDay), findViewById(R.id.btnWeek),
+            findViewById(R.id.btnMonth), findViewById(R.id.btnYear)
+        )
+        val periods = listOf(
+            Records.Period.DAY, Records.Period.WEEK,
+            Records.Period.MONTH, Records.Period.YEAR
+        )
+        periodButtons.forEachIndexed { i, b ->
+            b.setOnClickListener { period = periods[i]; drawStats() }
+        }
 
         findViewById<Button>(R.id.btnPrev).setOnClickListener {
             cal.add(Calendar.MONTH, -1); draw()
@@ -35,6 +58,7 @@ class CalendarActivity : AppCompatActivity() {
 
         cal.set(Calendar.DAY_OF_MONTH, 1)
         draw()
+        drawStats()
     }
 
     private fun draw() {
@@ -58,6 +82,27 @@ class CalendarActivity : AppCompatActivity() {
         for (d in 1..last) {
             val date = String.format("%04d-%02d-%02d", year, month, d)
             grid.addView(dayCell(d, date))
+        }
+    }
+
+    private fun drawStats() {
+        val data = Records.series(this, period)
+        stats.setData(data)
+        tvStatSum.text = "합계 ${data.sumOf { it.second }}개"
+        tvStatTitle.text = when (period) {
+            Records.Period.DAY -> "최근 14일"
+            Records.Period.WEEK -> "최근 8주"
+            Records.Period.MONTH -> "최근 12개월"
+            Records.Period.YEAR -> "최근 5년"
+        }
+        val idx = listOf(
+            Records.Period.DAY, Records.Period.WEEK,
+            Records.Period.MONTH, Records.Period.YEAR
+        ).indexOf(period)
+        periodButtons.forEachIndexed { i, b ->
+            b.setTextColor(
+                if (i == idx) Color.parseColor("#FFD700") else Color.parseColor("#8A8A8A")
+            )
         }
     }
 

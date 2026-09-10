@@ -32,6 +32,8 @@ class MainActivity : AppCompatActivity() {
     private var musicOn = true
 
     private var lastRepTime = 0L
+    private var streak = 0                      // 쉬지 않고 이어서 한 개수
+    private val restMillis = 600_000L           // 10분. 이 시간이 지나면 세트가 끊긴 것으로 본다
 
     private lateinit var tvGoal: TextView
     private lateinit var tvLevel: TextView
@@ -56,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Insets.applyBottom(findViewById(R.id.root))
 
         tvGoal = findViewById(R.id.tvGoal)
         tvLevel = findViewById(R.id.tvLevel)
@@ -75,6 +78,9 @@ class MainActivity : AppCompatActivity() {
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.KOREAN
+                pickBestVoice()
+                tts?.setPitch(1.18f)      // 조금 높여 밝은 톤으로
+                tts?.setSpeechRate(1.08f) // 살짝 빠르게 해 경쾌하게
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) = duck(true)
                     override fun onDone(id: String?) = duck(false)
@@ -100,6 +106,18 @@ class MainActivity : AppCompatActivity() {
             true
         }
         btnMusic.setOnClickListener { toggleMusic() }
+        // 음악 버튼을 길게 누르면 폰의 음성(TTS) 설정 화면으로 바로 간다
+        btnMusic.setOnLongClickListener {
+            try {
+                startActivity(Intent("com.android.settings.TTS_SETTINGS"))
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(
+                    this, "이 폰에서는 설정 → 접근성 → TalkBack → 글자 읽어주기 에서 바꾸십시오",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+            true
+        }
 
         findViewById<android.view.View>(R.id.touchArea).setOnTouchListener { v, e ->
             if (e.action == android.view.MotionEvent.ACTION_UP) {
@@ -200,6 +218,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        streak = 0
+        lastRepTime = 0L
         stopMusic()
     }
 
@@ -213,9 +233,12 @@ class MainActivity : AppCompatActivity() {
     // ---------- 카운트 ----------
 
     private fun addRep() {
-        // 손이 미끄러져 두 번 잡히는 것을 막는다
         val now = System.currentTimeMillis()
+        // 손이 미끄러져 두 번 잡히는 것을 막는다
         if (now - lastRepTime < 250) return
+
+        // 10분 넘게 쉬었으면 연속이 끊긴 것으로 본다
+        streak = if (lastRepTime > 0 && now - lastRepTime <= restMillis) streak + 1 else 1
         lastRepTime = now
 
         Records.addOne(this, goal, level)
@@ -223,14 +246,22 @@ class MainActivity : AppCompatActivity() {
         render()
 
         val doneKey = "done_" + Records.today()
-        val already = prefs.getBoolean(doneKey, false)
+        val alreadyToday = prefs.getBoolean(doneKey, false)
+
+        // 한 세트로 목표를 끝냈다 — 수료증
+        if (streak == goal) {
+            confetti.burst()
+            speak("한 번에 ${goal}개를 끝내셨습니다. 대단합니다.")
+            if (!alreadyToday) prefs.edit().putBoolean(doneKey, true).apply()
+            offerCertificate()
+            return
+        }
 
         when {
-            today >= goal && !already -> {
+            today >= goal && !alreadyToday -> {
                 prefs.edit().putBoolean(doneKey, true).apply()
-                speak("오늘 목표 달성입니다. 대단합니다.")
                 confetti.burst()
-                checkCertificate()
+                speak("오늘 목표 달성입니다. 대단합니다.")
             }
             today % 10 == 0 -> {
                 val line = lines[(today / 10) % lines.size]
@@ -250,25 +281,39 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
-    private fun checkCertificate() {
-        val days = Records.certifiedDays(this, level)
-        if (days == Records.DAYS_TO_CERTIFY) {
-            AlertDialog.Builder(this)
-                .setTitle("수료")
-                .setMessage(
-                    "${Records.LEVELS.getOrElse(level) { "" }}\n\n" +
-                    "목표 달성 ${Records.DAYS_TO_CERTIFY}일을 채우셨습니다.\n" +
-                    "수료증을 만들 수 있습니다."
-                )
-                .setPositiveButton("수료증 만들기") { _, _ ->
-                    startActivity(Intent(this, CertificateActivity::class.java).apply {
-                        putExtra(CertificateActivity.EXTRA_LEVEL, level)
-                        putExtra(CertificateActivity.EXTRA_DATE, Records.today())
-                    })
-                }
-                .setNegativeButton("나중에", null)
-                .show()
-        }
+    private fun offerCertificate() {
+        AlertDialog.Builder(this)
+            .setTitle("한 세트 완주")
+            .setMessage(
+                "${Records.LEVELS.getOrElse(level) { "" }}\n\n" +
+                "쉬지 않고 ${goal}개를 끝내셨습니다.\n" +
+                "수료증을 만들어 남기시겠습니까?"
+            )
+            .setPositiveButton("수료증 만들기") { _, _ ->
+                startActivity(Intent(this, CertificateActivity::class.java).apply {
+                    putExtra(CertificateActivity.EXTRA_LEVEL, level)
+                    putExtra(CertificateActivity.EXTRA_DATE, Records.today())
+                    putExtra(CertificateActivity.EXTRA_REPS, goal)
+                })
+            }
+            .setNegativeButton("나중에", null)
+            .show()
+    }
+
+    /** 폰에 설치된 음성 중 품질이 가장 좋은 한국어 여성 음성을 고른다 */
+    private fun pickBestVoice() {
+        try {
+            val voices = tts?.voices ?: return
+            val ko = voices.filter { it.locale.language == "ko" && !it.isNetworkConnectionRequired }
+            if (ko.isEmpty()) return
+            // 이름에 female 이 들어가거나 품질 점수가 높은 것을 우선
+            val best = ko.sortedWith(
+                compareByDescending<android.speech.tts.Voice> {
+                    if (it.name.contains("female", true) || it.name.contains("-f", true)) 1 else 0
+                }.thenByDescending { it.quality }
+            ).first()
+            tts?.voice = best
+        } catch (e: Exception) { }
     }
 
     private fun speak(text: String) {
@@ -286,7 +331,8 @@ class MainActivity : AppCompatActivity() {
         tvCount.text = today.toString()
         tvOfGoal.text = "/ $goal"
         tvPct.text = "${(today.toFloat() / goal * 100).roundToInt()}%"
-        tvGhost.text = if (ghost > 0) "지난 운동일 ${ghost}개" else "지난 기록 없음"
+        val ghostText = if (ghost > 0) "지난 운동일 ${ghost}개" else "지난 기록 없음"
+        tvGhost.text = if (streak > 1) "연속 ${streak}개   ·   $ghostText" else ghostText
 
         // 음악은 글자 대신 색으로 켜짐/꺼짐을 표시한다
         btnMusic.setTextColor(
@@ -330,6 +376,8 @@ class MainActivity : AppCompatActivity() {
             .setMessage("오늘 개수를 0으로 되돌립니다.\n지난 날짜 기록은 그대로 남습니다.")
             .setPositiveButton("초기화") { _, _ ->
                 Records.resetToday(this)
+                streak = 0
+                lastRepTime = 0L
                 prefs.edit().putBoolean("done_" + Records.today(), false).apply()
                 render()
             }

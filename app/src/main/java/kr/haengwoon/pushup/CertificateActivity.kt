@@ -34,6 +34,7 @@ class CertificateActivity : AppCompatActivity() {
         const val EXTRA_LEVEL = "level"
         const val EXTRA_DATE = "date"
         const val EXTRA_VIEW_ONLY = "viewOnly"
+        const val EXTRA_REPS = "reps"
         private const val W = 1240
         private const val H = 1754
     }
@@ -42,6 +43,7 @@ class CertificateActivity : AppCompatActivity() {
     private lateinit var date: String
     private var photo: Bitmap? = null
     private var name: String = ""
+    private var reps: Int = 0
     private var current: Bitmap? = null
 
     private lateinit var preview: ImageView
@@ -62,11 +64,20 @@ class CertificateActivity : AppCompatActivity() {
         level = intent.getIntExtra(EXTRA_LEVEL, 0)
         date = intent.getStringExtra(EXTRA_DATE) ?: Records.today()
         val viewOnly = intent.getBooleanExtra(EXTRA_VIEW_ONLY, false)
+        reps = intent.getIntExtra(EXTRA_REPS, 0)
 
         preview = findViewById(R.id.preview)
         val btnPhoto = findViewById<Button>(R.id.btnPhoto)
 
+        Insets.applyBottom(findViewById(R.id.root))
+
         findViewById<Button>(R.id.btnClose).setOnClickListener { finish() }
+        findViewById<Button>(R.id.btnSave).setOnClickListener {
+            current?.let {
+                saveToFile(it)
+                Toast.makeText(this, "저장했습니다. 달력에서 다시 볼 수 있습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
         findViewById<Button>(R.id.btnShare).setOnClickListener { share() }
         btnPhoto.setOnClickListener {
             picker.launch(PickVisualMediaRequest.Builder()
@@ -82,6 +93,7 @@ class CertificateActivity : AppCompatActivity() {
         if (viewOnly && saved != null && File(saved).exists()) {
             btnPhoto.isEnabled = false
             findViewById<Button>(R.id.btnName).isEnabled = false
+            findViewById<Button>(R.id.btnSave).isEnabled = false
             current = BitmapFactory.decodeFile(saved)
             preview.setImageBitmap(current)
         } else {
@@ -95,7 +107,7 @@ class CertificateActivity : AppCompatActivity() {
         val bmp = draw()
         current = bmp
         preview.setImageBitmap(bmp)
-        saveToFile(bmp)
+        // 저장은 "저장" 버튼을 눌렀을 때만 한다
     }
 
     private fun draw(): Bitmap {
@@ -220,7 +232,7 @@ class CertificateActivity : AppCompatActivity() {
             style = Paint.Style.STROKE; color = goldPale; strokeWidth = 3f
         })
 
-        text("${Records.DAYS_TO_CERTIFY} DAYS OF DAILY GOAL ACHIEVEMENT", 1230f, 26f, ink, serifThin, 0.12f)
+        text("$reps  PUSH-UPS  IN  ONE  UNBROKEN  SET", 1230f, 26f, ink, serifThin, 0.12f)
         text("Date awarded   " + prettyDate(), 1288f, 26f, grey, serifThin, 0.06f)
 
         // 서명 두 곳
@@ -342,6 +354,9 @@ class CertificateActivity : AppCompatActivity() {
 
     private fun share() {
         val f = file()
+        if (!f.exists()) {
+            current?.let { saveToFile(it) }
+        }
         if (!f.exists()) {
             Toast.makeText(this, "이미지가 아직 없습니다", Toast.LENGTH_SHORT).show()
             return

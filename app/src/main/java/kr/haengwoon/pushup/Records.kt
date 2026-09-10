@@ -25,9 +25,6 @@ object Records {
 
     val LEVELS_SHORT = listOf("초급", "중급", "고급", "최고급", "마스터")
 
-    /** 한 난이도를 수료하는 데 필요한 목표 달성 일수 */
-    const val DAYS_TO_CERTIFY = 20
-
     private const val KEY = "records"
 
     fun today(): String =
@@ -101,6 +98,73 @@ object Records {
         day.put("c", 0)
         all.put(today(), day)
         save(ctx, all)
+    }
+
+    /** 통계 보기 단위 */
+    enum class Period { DAY, WEEK, MONTH, YEAR }
+
+    /**
+     * 그래프용 데이터. (짧은 라벨, 개수) 목록을 오래된 것부터 반환한다.
+     */
+    fun series(ctx: Context, period: Period): List<Pair<String, Int>> {
+        val all = load(ctx)
+        val cal = Calendar.getInstance()
+        val fmtDay = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+
+        fun countOn(key: String): Int = all.optJSONObject(key)?.optInt("c", 0) ?: 0
+
+        return when (period) {
+            Period.DAY -> {
+                val out = mutableListOf<Pair<String, Int>>()
+                val c = Calendar.getInstance()
+                c.add(Calendar.DAY_OF_YEAR, -13)
+                repeat(14) {
+                    val key = fmtDay.format(c.time)
+                    out.add(SimpleDateFormat("d", Locale.KOREA).format(c.time) to countOn(key))
+                    c.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                out
+            }
+            Period.WEEK -> {
+                val out = mutableListOf<Pair<String, Int>>()
+                val c = Calendar.getInstance()
+                c.add(Calendar.DAY_OF_YEAR, -7 * 7)
+                repeat(8) {
+                    var sum = 0
+                    val label = SimpleDateFormat("M/d", Locale.KOREA).format(c.time)
+                    repeat(7) {
+                        sum += countOn(fmtDay.format(c.time))
+                        c.add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                    out.add(label to sum)
+                }
+                out
+            }
+            Period.MONTH -> {
+                val out = mutableListOf<Pair<String, Int>>()
+                val c = Calendar.getInstance()
+                c.add(Calendar.MONTH, -11)
+                repeat(12) {
+                    val y = c.get(Calendar.YEAR)
+                    val m = c.get(Calendar.MONTH) + 1
+                    var sum = 0
+                    for (k in all.keys()) {
+                        if (k.startsWith(String.format("%04d-%02d", y, m))) sum += countOn(k)
+                    }
+                    out.add("${m}월" to sum)
+                    c.add(Calendar.MONTH, 1)
+                }
+                out
+            }
+            Period.YEAR -> {
+                val thisYear = cal.get(Calendar.YEAR)
+                (thisYear - 4..thisYear).map { y ->
+                    var sum = 0
+                    for (k in all.keys()) if (k.startsWith("$y-")) sum += countOn(k)
+                    "$y" to sum
+                }
+            }
+        }
     }
 
     /** 특정 난이도로 목표를 달성한 날짜 수 */
