@@ -26,11 +26,11 @@ class ConfettiView @JvmOverloads constructor(
     private val parts = mutableListOf<Particle>()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    fun burst() {
+    fun burst(small: Boolean = false) {
         parts.clear()
         val cx = width / 2f
         val cy = height * 0.4f
-        repeat(110) { i ->
+        repeat(if (small) 40 else 130) { i ->
             val a = Random.nextFloat() * 6.283f
             val sp = 6f + Random.nextFloat() * 24f
             parts.add(

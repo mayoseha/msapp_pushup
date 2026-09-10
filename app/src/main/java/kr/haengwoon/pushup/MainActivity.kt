@@ -2,13 +2,12 @@ package kr.haengwoon.pushup
 
 import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.InputType
 import android.view.WindowManager
 import android.widget.Button
@@ -18,33 +17,29 @@ import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
 import kotlin.math.roundToInt
 
-class MainActivity : AppCompatActivity(), SensorEventListener {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var sm: SensorManager
-    private var proximity: Sensor? = null
     private var tts: TextToSpeech? = null
+    private var player: MediaPlayer? = null
+    private var playlist: List<Int> = emptyList()
+    private var trackIndex = 0
+    private val baseVolume = 0.7f
+    private val fadeHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
-    private var count = 0
-    private var ghost = 0
     private var goal = 100
-    private var gaugeMode = GaugeView.MODE_RING
-    private var touchBackup = false
+    private var level = 1
+    private var musicOn = true
 
-    private var covered = false
-    private var maxRange = 5f
-    private var threshold = 2.5f
-    private var lastValue = -1f
     private var lastRepTime = 0L
 
     private lateinit var tvGoal: TextView
+    private lateinit var tvLevel: TextView
     private lateinit var tvCount: TextView
     private lateinit var tvOfGoal: TextView
     private lateinit var tvPct: TextView
     private lateinit var tvGhost: TextView
-    private lateinit var tvDebug: TextView
-    private lateinit var btnMode: Button
-    private lateinit var btnTouch: Button
+    private lateinit var btnMusic: Button
     private lateinit var gauge: GaugeView
     private lateinit var confetti: ConfettiView
 
@@ -63,108 +58,216 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         tvGoal = findViewById(R.id.tvGoal)
+        tvLevel = findViewById(R.id.tvLevel)
         tvCount = findViewById(R.id.tvCount)
         tvOfGoal = findViewById(R.id.tvOfGoal)
         tvPct = findViewById(R.id.tvPct)
         tvGhost = findViewById(R.id.tvGhost)
-        tvDebug = findViewById(R.id.tvDebug)
-        btnMode = findViewById(R.id.btnMode)
-        btnTouch = findViewById(R.id.btnTouch)
+        btnMusic = findViewById(R.id.btnMusic)
         gauge = findViewById(R.id.gauge)
         confetti = findViewById(R.id.confetti)
 
         prefs = getSharedPreferences("pushup", Context.MODE_PRIVATE)
-        count = prefs.getInt("count", 0)
-        ghost = prefs.getInt("ghost", 0)
         goal = prefs.getInt("goal", 100)
-        gaugeMode = prefs.getInt("mode", GaugeView.MODE_RING)
-        touchBackup = prefs.getBoolean("touch", false)
-
-        sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        proximity = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        proximity?.let {
-            maxRange = if (it.maximumRange > 0f) it.maximumRange else 5f
-            threshold = maxRange / 2f
-        }
+        level = prefs.getInt("level", 1)
+        musicOn = prefs.getBoolean("music", true)
 
         tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) tts?.language = Locale.KOREAN
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.KOREAN
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(id: String?) = duck(true)
+                    override fun onDone(id: String?) = duck(false)
+                    @Deprecated("deprecated")
+                    override fun onError(id: String?) = duck(false)
+                })
+            }
         }
 
         findViewById<Button>(R.id.btnReset).setOnClickListener { confirmReset() }
         findViewById<Button>(R.id.btnGoal).setOnClickListener { askGoal() }
-        btnMode.setOnClickListener { toggleMode() }
-        btnTouch.setOnClickListener { toggleTouch() }
+        findViewById<Button>(R.id.btnLevel).setOnClickListener { askLevel() }
+        findViewById<Button>(R.id.btnCalendar).setOnClickListener {
+            startActivity(Intent(this, CalendarActivity::class.java))
+        }
+        // 임시 확인용: 달력 버튼을 길게 누르면 수료증 화면이 바로 열린다.
+        // 정식 출시 전에 이 블록을 삭제할 것.
+        findViewById<Button>(R.id.btnCalendar).setOnLongClickListener {
+            startActivity(Intent(this, CertificateActivity::class.java).apply {
+                putExtra(CertificateActivity.EXTRA_LEVEL, level)
+                putExtra(CertificateActivity.EXTRA_DATE, Records.today())
+            })
+            true
+        }
+        btnMusic.setOnClickListener { toggleMusic() }
 
-        findViewById<android.view.View>(R.id.touchArea).setOnClickListener {
-            if (touchBackup) addRep(fromSensor = false)
+        findViewById<android.view.View>(R.id.touchArea).setOnTouchListener { v, e ->
+            if (e.action == android.view.MotionEvent.ACTION_UP) {
+                v.performClick()
+                addRep()
+            }
+            true
         }
 
-        gauge.mode = gaugeMode
         render()
-        updateDebug()
     }
+
+    // ---------- 배경음악 ----------
+
+    /** res/raw 에 있는 bgm1, bgm2, bgm3 ... 를 찾아 목록을 만든다 */
+    private fun buildPlaylist(): List<Int> {
+        val list = mutableListOf<Int>()
+        var i = 1
+        while (true) {
+            val id = resources.getIdentifier("bgm$i", "raw", packageName)
+            if (id == 0) break
+            list.add(id)
+            i++
+        }
+        // 이름 없이 bgm.mp3 만 넣은 경우도 받아준다
+        if (list.isEmpty()) {
+            val single = resources.getIdentifier("bgm", "raw", packageName)
+            if (single != 0) list.add(single)
+        }
+        return list
+    }
+
+    private fun startMusic() {
+        if (!musicOn || player != null) return
+        if (playlist.isEmpty()) {
+            playlist = buildPlaylist().shuffled()   // 켤 때마다 순서를 섞는다
+            trackIndex = 0
+        }
+        if (playlist.isEmpty()) return              // 음원이 하나도 없으면 조용히 넘어간다
+        playTrack()
+    }
+
+    private fun playTrack() {
+        val id = playlist.getOrNull(trackIndex) ?: return
+        player = MediaPlayer.create(this, id)?.apply {
+            isLooping = false
+            setVolume(0f, 0f)                       // 무음으로 시작해 서서히 올린다
+            setOnCompletionListener { nextTrack() }
+            start()
+        }
+        fadeIn()
+    }
+
+    /** 곡이 바뀌는 순간 음성 카운트를 덮지 않도록 1초에 걸쳐 볼륨을 올린다 */
+    private fun fadeIn() {
+        val steps = 10
+        for (i in 1..steps) {
+            fadeHandler.postDelayed({
+                val v = baseVolume * i / steps
+                try { player?.setVolume(v, v) } catch (e: Exception) { }
+            }, (i * 100).toLong())
+        }
+    }
+
+    private fun nextTrack() {
+        player?.release()
+        player = null
+        trackIndex++
+        if (trackIndex >= playlist.size) {
+            playlist = playlist.shuffled()          // 한 바퀴 돌면 순서를 다시 섞는다
+            trackIndex = 0
+        }
+        if (musicOn) playTrack()
+    }
+
+    private fun stopMusic() {
+        fadeHandler.removeCallbacksAndMessages(null)
+        player?.let {
+            it.setOnCompletionListener(null)
+            if (it.isPlaying) it.stop()
+            it.release()
+        }
+        player = null
+    }
+
+    private fun duck(quiet: Boolean) {
+        val v = if (quiet) 0.15f else baseVolume
+        try { player?.setVolume(v, v) } catch (e: Exception) { }
+    }
+
+    // ---------- 수명주기 ----------
 
     override fun onResume() {
         super.onResume()
-        proximity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) }
+        startMusic()
+        render()
     }
 
     override fun onPause() {
         super.onPause()
-        sm.unregisterListener(this)
+        stopMusic()
     }
 
     override fun onDestroy() {
         tts?.stop()
         tts?.shutdown()
+        stopMusic()
         super.onDestroy()
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    // ---------- 카운트 ----------
 
-    override fun onSensorChanged(event: SensorEvent?) {
-        val d = event?.values?.getOrNull(0) ?: return
-        lastValue = d
-        if (!covered && d < threshold) {
-            covered = true
-        } else if (covered && d >= threshold) {
-            covered = false
-            addRep(fromSensor = true)
-        }
-        updateDebug()
-    }
-
-    private fun updateDebug() {
-        tvDebug.text = if (proximity == null) {
-            "이 기기에서 근접센서를 찾지 못했습니다"
-        } else {
-            val v = if (lastValue < 0f) "―" else String.format("%.1f", lastValue)
-            val state = if (covered) "닿음" else "떨어짐"
-            "센서 $v  기준 ${String.format("%.1f", threshold)}  최대 ${String.format("%.1f", maxRange)}  $state"
-        }
-    }
-
-    private fun addRep(fromSensor: Boolean) {
+    private fun addRep() {
+        // 손이 미끄러져 두 번 잡히는 것을 막는다
         val now = System.currentTimeMillis()
-        if (!fromSensor && now - lastRepTime < 800) return
+        if (now - lastRepTime < 250) return
         lastRepTime = now
 
-        count++
-        prefs.edit().putInt("count", count).apply()
+        Records.addOne(this, goal, level)
+        val today = Records.todayCount(this)
         render()
 
+        val doneKey = "done_" + Records.today()
+        val already = prefs.getBoolean(doneKey, false)
+
         when {
-            count == goal -> {
-                speak("목표 달성입니다. 대단합니다.")
+            today >= goal && !already -> {
+                prefs.edit().putBoolean(doneKey, true).apply()
+                speak("오늘 목표 달성입니다. 대단합니다.")
                 confetti.burst()
+                checkCertificate()
             }
-            count % 10 == 0 -> {
-                val line = lines[(count / 10) % lines.size]
-                val left = goal - count
+            today % 10 == 0 -> {
+                val line = lines[(today / 10) % lines.size]
+                val left = goal - today
                 speak(if (left > 0) "$line ${left}개 남았습니다." else "$line 목표를 넘었습니다.")
+                if (isCheckpoint(today)) confetti.burst(small = true)
             }
-            else -> speak(count.toString())
+            else -> speak(today.toString())
+        }
+    }
+
+    private fun isCheckpoint(c: Int): Boolean {
+        for (p in listOf(0.25f, 0.5f, 0.75f)) {
+            val mark = Math.ceil((goal * p).toDouble()).toInt()
+            if (c >= mark && c - 10 < mark) return true
+        }
+        return false
+    }
+
+    private fun checkCertificate() {
+        val days = Records.certifiedDays(this, level)
+        if (days == Records.DAYS_TO_CERTIFY) {
+            AlertDialog.Builder(this)
+                .setTitle("수료")
+                .setMessage(
+                    "${Records.LEVELS.getOrElse(level) { "" }}\n\n" +
+                    "목표 달성 ${Records.DAYS_TO_CERTIFY}일을 채우셨습니다.\n" +
+                    "수료증을 만들 수 있습니다."
+                )
+                .setPositiveButton("수료증 만들기") { _, _ ->
+                    startActivity(Intent(this, CertificateActivity::class.java).apply {
+                        putExtra(CertificateActivity.EXTRA_LEVEL, level)
+                        putExtra(CertificateActivity.EXTRA_DATE, Records.today())
+                    })
+                }
+                .setNegativeButton("나중에", null)
+                .show()
         }
     }
 
@@ -172,44 +275,62 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rep")
     }
 
+    // ---------- 화면 ----------
+
     private fun render() {
-        tvGoal.text = "목표 ${goal}개"
-        tvCount.text = count.toString()
+        val today = Records.todayCount(this)
+        val ghost = Records.previousDayCount(this)
+
+        tvGoal.text = "오늘 목표 ${goal}개"
+        tvLevel.text = Records.LEVELS.getOrElse(level) { "" }
+        tvCount.text = today.toString()
         tvOfGoal.text = "/ $goal"
-        tvPct.text = "${(count.toFloat() / goal * 100).roundToInt()}%"
-        btnMode.text = if (gaugeMode == GaugeView.MODE_RING) "원형" else "직선"
-        btnTouch.text = if (touchBackup) "터치 켬" else "터치 끔"
+        tvPct.text = "${(today.toFloat() / goal * 100).roundToInt()}%"
+        tvGhost.text = if (ghost > 0) "지난 운동일 ${ghost}개" else "지난 기록 없음"
 
-        // 초기화 직후(0개)에는 고스트 눈금을 감춘다. 1개째부터 다시 나타난다.
-        val showGhost = if (count > 0) ghost else 0
-        tvGhost.text = when {
-            count == 0 -> ""
-            ghost > 0 -> "직전 ${ghost}개"
-            else -> "직전 기록 없음"
+        // 음악은 글자 대신 색으로 켜짐/꺼짐을 표시한다
+        btnMusic.setTextColor(
+            if (musicOn) android.graphics.Color.parseColor("#FFD700")
+            else android.graphics.Color.parseColor("#FFB0B0B0")
+        )
+
+        gauge.setValues(today, ghost, goal)
+    }
+
+    // ---------- 버튼 ----------
+
+    private fun toggleMusic() {
+        musicOn = !musicOn
+        prefs.edit().putBoolean("music", musicOn).apply()
+        if (musicOn) {
+            startMusic()
+        } else {
+            stopMusic()
+            playlist = emptyList()
         }
-        gauge.setValues(count, showGhost, goal)
-    }
-
-    private fun toggleMode() {
-        gaugeMode = if (gaugeMode == GaugeView.MODE_RING) GaugeView.MODE_BAR else GaugeView.MODE_RING
-        prefs.edit().putInt("mode", gaugeMode).apply()
-        gauge.mode = gaugeMode
         render()
     }
 
-    private fun toggleTouch() {
-        touchBackup = !touchBackup
-        prefs.edit().putBoolean("touch", touchBackup).apply()
-        render()
+    private fun askLevel() {
+        val items = Records.LEVELS.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("난이도")
+            .setSingleChoiceItems(items, level) { dlg, which ->
+                level = which
+                prefs.edit().putInt("level", level).apply()
+                render()
+                dlg.dismiss()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     private fun confirmReset() {
         AlertDialog.Builder(this)
-            .setMessage("지금 개수를 직전 기록으로 넘기고 0부터 시작합니다.")
+            .setMessage("오늘 개수를 0으로 되돌립니다.\n지난 날짜 기록은 그대로 남습니다.")
             .setPositiveButton("초기화") { _, _ ->
-                ghost = count
-                count = 0
-                prefs.edit().putInt("ghost", ghost).putInt("count", 0).apply()
+                Records.resetToday(this)
+                prefs.edit().putBoolean("done_" + Records.today(), false).apply()
                 render()
             }
             .setNegativeButton("취소", null)
@@ -222,7 +343,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             setText(goal.toString())
         }
         AlertDialog.Builder(this)
-            .setTitle("목표 개수")
+            .setTitle("오늘 목표 개수")
             .setView(input)
             .setPositiveButton("확인") { _, _ ->
                 val v = input.text.toString().toIntOrNull()

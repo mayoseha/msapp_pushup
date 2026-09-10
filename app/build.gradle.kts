@@ -11,8 +11,8 @@ android {
         applicationId = "kr.haengwoon.pushup"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 11
+        versionName = "1.9"
     }
 
     signingConfigs {
@@ -48,4 +48,5 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
 }

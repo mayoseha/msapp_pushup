@@ -13,7 +13,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingLeft="20dp"
+        android:paddingRight="20dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -21,44 +24,63 @@
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/btnReset"
+                android:id="@+id/btnCalendar"
                 style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="초기화"
-                android:textColor="@color/dim"
-                android:textSize="13sp" />
-
-            <View
                 android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <Button
-                android:id="@+id/btnTouch"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="터치 끔"
-                android:textColor="@color/dim"
+                android:layout_weight="1"
+                android:layout_height="46dp"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
+                android:text="달력"
+                android:textColor="#FFB0B0B0"
                 android:textSize="13sp" />
 
             <Button
-                android:id="@+id/btnMode"
+                android:id="@+id/btnLevel"
                 style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="원형"
-                android:textColor="@color/dim"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="46dp"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
+                android:text="난이도"
+                android:textColor="#FFB0B0B0"
                 android:textSize="13sp" />
 
             <Button
                 android:id="@+id/btnGoal"
                 style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="46dp"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
                 android:text="목표"
-                android:textColor="@color/dim"
+                android:textColor="#FFB0B0B0"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnReset"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="46dp"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
+                android:text="초기화"
+                android:textColor="#FFB0B0B0"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnMusic"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="46dp"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
+                android:text="음악"
+                android:textColor="#FFB0B0B0"
                 android:textSize="13sp" />
         </LinearLayout>
 
@@ -66,95 +88,88 @@
             android:id="@+id/tvGoal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:gravity="center"
-            android:text="목표 100개"
+            android:text="오늘 목표 100개"
             android:textColor="@color/dim"
-            android:textSize="15sp" />
+            android:textSize="19sp" />
+
+        <TextView
+            android:id="@+id/tvLevel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
+            android:text="중급 · 기본 자세"
+            android:textColor="@color/accent"
+            android:textSize="17sp" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <FrameLayout
+        <TextView
+            android:id="@+id/tvCount"
             android:layout_width="match_parent"
-            android:layout_height="300dp">
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:text="0"
+            android:textColor="#FFFFFFFF"
+            android:textSize="104sp"
+            android:textStyle="bold" />
 
-            <kr.haengwoon.pushup.GaugeView
-                android:id="@+id/gauge"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+        <TextView
+            android:id="@+id/tvOfGoal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:text="오늘 0 / 100"
+            android:textColor="@color/dim"
+            android:textSize="24sp" />
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center_horizontal"
-                android:orientation="vertical">
+        <TextView
+            android:id="@+id/tvPct"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="0%"
+            android:textColor="@color/accent"
+            android:textSize="34sp"
+            android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/tvCount"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="76sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvOfGoal"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="/ 100"
-                    android:textColor="@color/dim"
-                    android:textSize="22sp" />
-
-                <TextView
-                    android:id="@+id/tvPct"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="0%"
-                    android:textColor="@color/accent"
-                    android:textSize="26sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </FrameLayout>
+        <kr.haengwoon.pushup.GaugeView
+            android:id="@+id/gauge"
+            android:layout_width="match_parent"
+            android:layout_height="26dp"
+            android:layout_marginTop="28dp" />
 
         <TextView
             android:id="@+id/tvGhost"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             android:gravity="center"
-            android:text="직전 기록 없음"
+            android:text=""
             android:textColor="@color/dim"
-            android:textSize="15sp" />
+            android:textSize="19sp" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
-
-        <TextView
-            android:id="@+id/tvDebug"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="센서 확인 중"
-            android:textColor="#FF7A7A7A"
-            android:textSize="13sp"
-            android:typeface="monospace" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:gravity="center"
-            android:text="폰을 바닥에 두고 코를 화면 맨 위에 대었다 떼면 1회"
-            android:textColor="#FF5F5F5F"
-            android:textSize="12sp" />
+            android:text="화면에 코를 대었다 떼면 1회"
+            android:textColor="#FF6A6A6A"
+            android:textSize="15sp" />
     </LinearLayout>
 
     <kr.haengwoon.pushup.ConfettiView
