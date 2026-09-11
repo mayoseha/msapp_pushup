@@ -247,9 +247,9 @@ class CertificateActivity : AppCompatActivity() {
         text("$reps  PUSH-UPS  IN  ONE  UNBROKEN  SET", 1230f, 26f, ink, serifThin, 0.12f)
         text("Date awarded   " + prettyDate(), 1288f, 26f, grey, serifThin, 0.06f)
 
-        // 좌우에 사람 모양 그림
-        drawPushupFigure(c, 350f, 1430f, 1.0f, ink)
-        drawCheerFigure(c, W - 350f, 1430f, 1.0f, ink)
+        // 좌우에 사람 실루엣 이미지
+        drawFigure(c, R.drawable.figure_pushup, 350f, 1500f, 300f, true)
+        drawFigure(c, R.drawable.figure_cheer, W - 350f, 1500f, 236f, false)
 
         // 가운데 인장
         val sy = 1420f
@@ -281,62 +281,24 @@ class CertificateActivity : AppCompatActivity() {
         return bmp
     }
 
-    /** 푸쉬업 자세 사람 모양 */
-    private fun drawPushupFigure(c: Canvas, cx: Float, cy: Float, k: Float, col: Int) {
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = col; style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+    /**
+     * 사람 실루엣 이미지를 그린다.
+     * cx 는 가로 중심, baseY 는 발이 닿는 아래쪽 기준선.
+     * byWidth 가 참이면 size 를 가로폭으로, 거짓이면 세로높이로 본다.
+     */
+    private fun drawFigure(c: Canvas, resId: Int, cx: Float, baseY: Float, size: Float, byWidth: Boolean) {
+        val bmp = BitmapFactory.decodeResource(resources, resId) ?: return
+        val ratio = bmp.height.toFloat() / bmp.width
+        val w: Float
+        val h: Float
+        if (byWidth) {
+            w = size; h = size * ratio
+        } else {
+            h = size; w = size / ratio
         }
-        val head = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col }
-
-        // 바닥선
-        p.strokeWidth = 5f * k
-        c.drawLine(cx - 130f * k, cy + 62f * k, cx + 130f * k, cy + 62f * k, p)
-
-        // 머리
-        c.drawCircle(cx - 88f * k, cy + 2f * k, 21f * k, head)
-
-        // 몸통 (어깨에서 엉덩이로 비스듬히)
-        p.strokeWidth = 26f * k
-        c.drawLine(cx - 62f * k, cy + 12f * k, cx + 58f * k, cy + 34f * k, p)
-
-        // 팔
-        p.strokeWidth = 16f * k
-        c.drawLine(cx - 58f * k, cy + 14f * k, cx - 52f * k, cy + 58f * k, p)
-
-        // 다리
-        p.strokeWidth = 18f * k
-        c.drawLine(cx + 56f * k, cy + 34f * k, cx + 122f * k, cy + 56f * k, p)
-    }
-
-    /** 두 팔 들고 기뻐하는 사람 모양 */
-    private fun drawCheerFigure(c: Canvas, cx: Float, cy: Float, k: Float, col: Int) {
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = col; style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
-        }
-        val head = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col }
-
-        // 바닥선
-        p.strokeWidth = 5f * k
-        c.drawLine(cx - 130f * k, cy + 62f * k, cx + 130f * k, cy + 62f * k, p)
-
-        // 머리
-        c.drawCircle(cx, cy - 74f * k, 22f * k, head)
-
-        // 몸통
-        p.strokeWidth = 24f * k
-        c.drawLine(cx, cy - 48f * k, cx, cy + 2f * k, p)
-
-        // 만세한 두 팔
-        p.strokeWidth = 15f * k
-        c.drawLine(cx - 6f * k, cy - 42f * k, cx - 52f * k, cy - 94f * k, p)
-        c.drawLine(cx + 6f * k, cy - 42f * k, cx + 52f * k, cy - 94f * k, p)
-
-        // 두 다리
-        p.strokeWidth = 17f * k
-        c.drawLine(cx - 3f * k, cy + 2f * k, cx - 34f * k, cy + 58f * k, p)
-        c.drawLine(cx + 3f * k, cy + 2f * k, cx + 34f * k, cy + 58f * k, p)
+        val dst = android.graphics.RectF(cx - w / 2f, baseY - h, cx + w / 2f, baseY)
+        c.drawBitmap(bmp, null, dst, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+        bmp.recycle()
     }
 
     private fun englishLevel(l: Int): String = when (l) {
